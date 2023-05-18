@@ -1,0 +1,7 @@
+beautifulsoup4
+requests
+pandas
+tabula-py
+pyodbc
+python-dotenv
+lxml
