@@ -1,0 +1,38 @@
+version: '3.4'
+
+services:
+  sqlserver:
+    user: root
+    restart: on-failure:3
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - PATH=$PATH:/opt/mssql-tools/bin/
+      - MSSQL_AGENT_ENABLED=False
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "sqlcmd -S localhost -U sa -P ${SA_PASSWORD} "
+        ] 
+      interval: 3s
+      timeout: 1s
+      retries: 50
+      start_period: 5s
+    ports:
+      - "1433:1433"
+    env_file:
+      - .env
+
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./data/planilhas/:/app/planilhas
+    env_file:
+      - .env
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    command: python /app/main.py
