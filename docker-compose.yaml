@@ -2,34 +2,44 @@ version: '3.4'
 
 services:
   sqlserver:
-    user: root
     restart: on-failure:3
     image: mcr.microsoft.com/mssql/server:2019-latest
+    user: root
+    ports:
+      - "1433:1433"
+    volumes:
+      - ./data/db_data:/var/opt/mssql/data
     environment:
       - ACCEPT_EULA=Y
       - PATH=$PATH:/opt/mssql-tools/bin/
       - MSSQL_AGENT_ENABLED=False
+      - MSSQL_ENABLE_HADR=0
+      - MSSQL_MEMORY_LIMIT_MB=1024
+      - TZ=America/Sao_Paulo
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "sqlcmd -S localhost -U sa -P ${SA_PASSWORD} "
-        ] 
-      interval: 3s
+          "sqlcmd -S localhost -U sa -P ${MSSQL_SA_PASSWORD} "
+        ]
+      interval: 2s
       timeout: 1s
-      retries: 50
+      retries: 100
       start_period: 5s
-    ports:
-      - "1433:1433"
     env_file:
       - .env
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 2G
 
   scraper:
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ./data/planilhas/:/app/planilhas
+      - ./data/planilhas/:/app/data/planilhas
     env_file:
       - .env
     depends_on:
