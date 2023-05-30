@@ -9,6 +9,9 @@ from modulos.database import DatabaseManager
 from modulos.logs import  DataLogger, columns_dataLogger, dataLogger_table_name, create_columns_dataLogger
 import os
 import time
+from dotenv import load_dotenv
+load_dotenv()
+
 
 
 class Scraper:
@@ -110,12 +113,15 @@ class Scraper:
         self.database_manager.create_table(table_name, tabela.create_table_columns)
         self.database_manager.create_table(dataLogger_table_name, create_columns_dataLogger)
 
-        path = '/app/data/planilhas'
+
+        path = os.getenv('pathCSV')
         if not os.path.exists(path):
             os.makedirs(path)
 
         try:
-            dataframes = []
+            data_values = []
+            log_values_list = []
+
             data = self.get_tables_data()
             for name_table, (df, href) in data.items():
                 filename = generate_filename(name_table)
@@ -124,28 +130,33 @@ class Scraper:
                 end_time = time.time()
                 total_time = end_time - start_time
                 tempo_formatado = formatar_tempo(total_time)
-                dataframes.append(df)
+
+                combined_df_values = tabela.create_values_list(df)
+                data_values.extend(combined_df_values)
+
                 data_logger = DataLogger(
                     href=href, filename=filename, qtd_linhas=len(df), tempo_busca=tempo_formatado, status='Salvo no Banco de dados')
                 log_data = data_logger.file_log_data()
-                log_values = tuple(log_data.values())
-                self.database_manager.insert_data(
-                    dataLogger_table_name, log_values, columns_dataLogger)
+                log_values_list.append(tuple(log_data.values()))
+
+            # Iniciar transação
+            self.database_manager.begin_transaction()
 
             try:
-                print('inserindo dados no banco de dados')
-                combined_df = pd.concat(dataframes)
-                combined_df_values = tabela.create_values_list(combined_df)
-                self.database_manager.insert_data(
-                    table_name, combined_df_values, tabela.table_columns)
-                self.logger_instance.info(
-                    f'All {len(combined_df)} lines saved in the database')
+                print('Inserindo dados no banco de dados')
+                self.database_manager.insert_data_bulk(dataLogger_table_name, log_values_list, columns_dataLogger)
+                self.database_manager.insert_data_bulk(table_name, data_values, tabela.table_columns)
+                self.logger_instance.info(f'{table_name} {len(data_values)} lines saved in the database')
             except Exception as e:
-                print(
-                    f'Erro ao inserir {len(combined_df)} linhas no banco de dados:', e)
+                print(f'Erro ao inserir {table_name} {len(data_values)} linhas no banco de dados:', e)
+                self.database_manager.rollback_transaction()
+            else:
+                # Commit da transação se tudo ocorrer sem erros
+                self.database_manager.commit_transaction()
+                self.logger_instance.info('Data and logs saved in the database')
         finally:
             end_time_program = time.time()
             total_time_program = end_time_program - start_time
             total_time_program_formatted = formatar_tempo(total_time_program)
             self.database_manager.close_connection()
-            self.logger_instance.info(f'connection closed:{total_time_program_formatted}')
+            self.logger_instance.info(f'Connection closed: {total_time_program_formatted}')

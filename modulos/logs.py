@@ -1,9 +1,12 @@
 import logging
+import sys  # Adicionado import do módulo sys
 from dotenv import load_dotenv
 import os
 from datetime import timezone, datetime, timedelta
 import glob
 from modulos.database import DatabaseManager
+import signal
+
 load_dotenv()
 log_file_table_name = "TB_LOG"
 
@@ -57,11 +60,12 @@ class DatabaseHandler(logging.StreamHandler):
         super().__init__()
         self.database_manager = DatabaseManager()
         self.log_filename = log_filename
+        self.br_timezone = timezone(timedelta(hours=-3))
     def emit(self, record):
         if record:
             log_data = {
                 'DS_LOG': record.msg,
-                'TS_LOG': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'TS_LOG': datetime.now(self.br_timezone).strftime("%Y-%m-%d %H:%M:%S"),
                 'NM_FILE': os.path.basename(self.log_filename)
             }
             values = tuple(log_data.values())
@@ -105,12 +109,24 @@ def create_log_file():
     timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
     log_filename = os.path.join(log_dir, f'log_{timestamp}.txt')
 
-    # Set up logger
+     # Set up logger
     logger_instance = logger(log_filename)
 
     # Customize the log filename in the database handler
     db_handler = DatabaseHandler(log_filename)
     db_handler.setLevel(logging.INFO)
     logger_instance.addHandler(db_handler)
+
+    # Define signal handler function to send logs before exiting
+    def send_logs_on_exit(signal, frame):
+        logger_instance.info("Sending logs to database before exiting...")
+        db_handler.flush()
+        db_handler.close()
+        logger_instance.info("Logs sent to database. Exiting...")
+        sys.exit(0)
+
+    # Register the signal handler
+    signal.signal(signal.SIGINT, send_logs_on_exit)
+    signal.signal(signal.SIGTERM, send_logs_on_exit)
 
     return log_filename, logger_instance

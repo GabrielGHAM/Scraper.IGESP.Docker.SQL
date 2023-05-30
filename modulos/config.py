@@ -12,3 +12,4 @@ def formatar_tempo(tempo):
     tempo_arredondado = round(tempo, 2)  
     tempo_formatado = "%.2f segundos" % tempo_arredondado  
     return tempo_formatado
+

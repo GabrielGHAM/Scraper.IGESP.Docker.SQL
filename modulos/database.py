@@ -2,15 +2,18 @@ import pyodbc
 import os
 import logging
 from dotenv import load_dotenv
+load_dotenv()
+
 
 logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
-        self.connection = None
+        self.connection = None  # Inicializa como None
+        self.cursor = None  # Inicializa como None
+        self.transaction_active = False
 
     def _db_connect(self):
-        load_dotenv()
         server = os.getenv('SERVER')
         database = os.getenv('DATABASE')
         username = os.getenv('UID')
@@ -21,6 +24,7 @@ class DatabaseManager:
             f"DATABASE={database};"
             f"UID={username};"
             f"PWD={password};"
+            f"MultipleActiveResultSets=True;"
         )
         try:
             return pyodbc.connect(connection_data)
@@ -31,8 +35,49 @@ class DatabaseManager:
     def _get_connection(self):
         if self.connection is None:
             self.connection = self._db_connect()
-            self.cursor = self.connection.cursor()  # Criar o cursor após estabelecer a conexão
-        return self.connection    
+        return self.connection
+
+    def begin_transaction(self):
+        connection = self._get_connection()
+        if connection is not None:
+            self.transaction_active = True
+            connection.autocommit = False  # Desativa o autocommit
+        else:
+            print("Não foi possível estabelecer a conexão com o banco de dados.")
+
+
+
+    def commit_transaction(self):
+        if self.transaction_active:
+            self.connection.commit()
+            self.connection.autocommit = True  # Restaura o autocommit
+            self.transaction_active = False
+
+
+    def rollback_transaction(self):
+        if self.transaction_active:
+            self.connection.rollback()
+            self.transaction_active = False
+
+    def insert_data_bulk(self, table_name, values_list, columns):
+        try:
+            connection = self._get_connection()
+            cursor = connection.cursor()
+
+            # Verificar se a tabela existe
+            cursor.execute(f"IF OBJECT_ID('{table_name}', 'U') IS NOT NULL SELECT 1 ELSE SELECT 0")
+            table_exists = cursor.fetchone()[0] == 1
+
+            if not table_exists:
+                print(f"Tabela {table_name} não existe!")
+
+            columns_str = ', '.join(columns)
+            placeholders = ', '.join(['?'] * len(columns))
+            insert_query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
+            cursor.executemany(insert_query, values_list)
+
+        except Exception as e:
+            print(f"Erro ao inserir dados: {str(e)}")
 
     def create_table(self, table_name, table_columns):
         try:
@@ -99,9 +144,6 @@ class DatabaseManager:
 
             if not table_exists:
                 print(f"Tabela {table_name} não existe!")
-                # Criar tabela caso não exista
-                # self.create_table(table_name, create_columns_log_file)
-
             columns_str = ', '.join(columns)
             placeholders = ', '.join(['?'] * len(columns))
             insert_query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
@@ -118,9 +160,10 @@ class DatabaseManager:
 
     def close_connection(self):
         if self.connection is not None:
-            self.connection.commit()
+            if self.transaction_active:
+                self.rollback_transaction()
             self.connection.close()
-            print("Conexão com o banco de dados fechada com sucesso!")
             self.connection = None
+            print("Conexão com o banco de dados fechada com sucesso!")
         else:
             print("Não há conexão ativa com o banco de dados.")

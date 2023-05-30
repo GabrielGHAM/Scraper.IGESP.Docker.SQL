@@ -1,21 +1,21 @@
 version: '3.4'
 
 services:
-  sqlserver:
-    restart: on-failure:3
+  dbsqlserver:
+    restart: on-failure:8
     image: mcr.microsoft.com/mssql/server:2019-latest
+    networks:
+      - my_network
     user: root
     ports:
       - "1433:1433"
     volumes:
-      - ./data/db_data:/var/opt/mssql/data
+      - mssqldata:/var/opt/mssql/data
     environment:
       - ACCEPT_EULA=Y
       - PATH=$PATH:/opt/mssql-tools/bin/
-      - MSSQL_AGENT_ENABLED=False
-      - MSSQL_ENABLE_HADR=0
-      - MSSQL_MEMORY_LIMIT_MB=1024
       - TZ=America/Sao_Paulo
+      - HOSTNAME=dbsqlserver
     healthcheck:
       test:
         [
@@ -23,26 +23,42 @@ services:
           "sqlcmd -S localhost -U sa -P ${MSSQL_SA_PASSWORD} "
         ]
       interval: 2s
-      timeout: 1s
+      timeout: 2s
       retries: 100
-      start_period: 5s
+      start_period: 4s
     env_file:
       - .env
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.5'
-    #       memory: 2G
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 2G
 
   scraper:
     build:
       context: .
       dockerfile: Dockerfile
+    user: root
     volumes:
       - ./data/planilhas/:/app/data/planilhas
     env_file:
       - .env
+    networks:
+      - my_network
     depends_on:
-      sqlserver:
+      dbsqlserver:
         condition: service_healthy
-    command: python /app/main.py
+    command: >
+      sh -c "echo 'Container scraper começou a ser executado!' && python /app/main.py"
+
+networks:
+  my_network:
+    driver: bridge
+
+volumes:
+  mssqldata:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/db_data/

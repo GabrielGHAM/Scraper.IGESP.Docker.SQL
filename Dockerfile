@@ -15,6 +15,8 @@ WORKDIR /app
 # Copiar o código para o diretório de trabalho
 COPY . /app
 
+USER root
+
 # Copiar o arquivo .env para o contêiner
 COPY .env /app/.env
 
