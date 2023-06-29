@@ -6,7 +6,7 @@
 
 Processo de extração e Carregamento (EL de ELT) das planilhas de pagamentos do IGESP DF, sendo executado em contêineres Docker.
 
-![arch](https://i.imgur.com/1Mm8EOh.png)
+![arch](https://i.imgur.com/YD3V6d5.png)
 
 
 
